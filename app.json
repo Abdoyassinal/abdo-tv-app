@@ -15,7 +15,7 @@
           "NSAllowsArbitraryLoads": true
         }
       },
-      "bundleIdentifier": "com.abdoyassin.abdotvapp"
+      "bundleIdentifier": "com.abdoyassin.abdotv"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +24,7 @@
       },
       "edgeToEdgeEnabled": true,
       "usesCleartextTraffic": true,
-      "package": "com.abdoyassin.abdotvapp"
+      "package": "com.abdoyassin.abdotv"
     },
     "web": {
       "bundler": "metro",
@@ -47,6 +47,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "1497afe5-fd43-4304-a963-f3079dde7942"
+      }
     }
   }
 }
