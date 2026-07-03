@@ -1,23 +1,9 @@
 {
-  "cli": {
-    "version": ">= 5.0.0",
-    "appVersionSource": "remote"
-  },
-  "build": {
-    "preview": {
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assemblePreview"
-      },
-      "distribution": "internal"
-    },
-    "production": {
-      "android": {
-        "buildType": "apk"
-      }
-    }
-  },
-  "submit": {
-    "production": {}
+  "expo": {
+    "name": "abdo tv",
+    "slug": "abdo-tv",
+    "version": "1.0.0",
+    "ios": { "supportsTablet": true },
+    "android": { "package": "com.abdoyassin.abdotv" }
   }
 }
