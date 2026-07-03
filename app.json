@@ -4,6 +4,11 @@
     "slug": "abdo-tv",
     "version": "1.0.0",
     "ios": { "supportsTablet": true },
-    "android": { "package": "com.abdoyassin.abdotv" }
+    "android": { "package": "com.abdoyassin.abdotv" },
+    "extra": {
+      "eas": {
+        "projectId": "1497afe5-fd43-4304-a963-f3079dde7942"
+      }
+    }
   }
 }
