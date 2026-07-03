@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "preinstall": "./scripts/cmd-guard.js --preinstall",
+    "preinstall": "node ./scripts/cmd-guard.js --preinstall",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
@@ -53,11 +53,5 @@
     "expo-doctor": "1.19.8",
     "typescript": "5.9.3"
   },
-  "resolutions": {
-    "@eslint/plugin-kit": "0.3.4",
-    "postcss": "8.5.10",
-    "uuid": "11.1.1"
-  },
-  "private": true,
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+  "private": true
 }
