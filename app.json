@@ -3,12 +3,50 @@
     "name": "abdo tv",
     "slug": "abdo-tv",
     "version": "1.0.0",
-    "ios": { "supportsTablet": true },
-    "android": { "package": "com.abdoyassin.abdotv" },
-    "extra": {
-      "eas": {
-        "projectId": "1497afe5-fd43-4304-a963-f3079dde7942"
-      }
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "frontend",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      },
+      "bundleIdentifier": "com.abdoyassin.abdotvapp"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "edgeToEdgeEnabled": true,
+      "usesCleartextTraffic": true,
+      "package": "com.abdoyassin.abdotvapp"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-image.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      "expo-video",
+      "react-native-edge-to-edge"
+    ],
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }
