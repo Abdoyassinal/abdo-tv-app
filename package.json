@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "preinstall": "node ./scripts/cmd-guard.js --preinstall",
+    "preinstall": "./scripts/cmd-guard.js --preinstall",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
@@ -25,6 +25,7 @@
     "expo-image": "3.0.11",
     "expo-linear-gradient": "15.0.8",
     "expo-linking": "8.0.12",
+    "expo-navigation-bar": "~5.0.10",
     "expo-router": "6.0.24",
     "expo-screen-orientation": "~9.0.9",
     "expo-secure-store": "15.0.8",
@@ -38,6 +39,7 @@
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-dotenv": "3.4.11",
+    "react-native-edge-to-edge": "1.8.1",
     "react-native-gesture-handler": "2.28.0",
     "react-native-reanimated": "4.1.1",
     "react-native-safe-area-context": "5.6.0",
@@ -53,5 +55,11 @@
     "expo-doctor": "1.19.8",
     "typescript": "5.9.3"
   },
+  "resolutions": {
+    "@eslint/plugin-kit": "0.3.4",
+    "postcss": "8.5.10",
+    "uuid": "11.1.1"
+  },
   "private": true
+  
 }
