@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-// استيراد المشغل المطور البديل لدعم قنوات الـ TS
+// استيراد المشغل المطور البديل لـ expo-video لفك تشفير قنوات الـ TS
 import Video, { VideoRef } from "react-native-video";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as Haptics from "expo-haptics";
@@ -20,15 +20,18 @@ import { colors, spacing, radius } from "@/src/theme/colors";
 import { api, Channel, Stream } from "@/src/api/client";
 
 function buildSource(stream: Stream) {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    // تمرير معرّف VLC القياسي لتجاوز حظر وحماية سيرفر الـ IPTV الخارجي
+    "User-Agent": "VLC/3.0.18 LibVLC/3.0.18"
+  };
+  
   if (stream.user_agent) headers["User-Agent"] = stream.user_agent;
   if (stream.referer) headers["Referer"] = stream.referer;
 
-  // إعدادات البث لـ ExoPlayer لالتقاط قنوات الـ TS والـ Xtream فوراً بدون تقطيع
   return {
     uri: stream.url,
-    headers: Object.keys(headers).length ? headers : undefined,
-    type: stream.type === "ts" ? "ts" : "m3u8",
+    headers: headers,
+    type: "ts", // إجبار محرك مشغل جوجل على تهيئة كوديكس الـ MPEG-TS تلقائياً للروابط المحمية
     bufferConfig: {
       minBufferMs: 15000,
       maxBufferMs: 50000,
@@ -71,7 +74,7 @@ export default function PlayerScreen() {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const initialStream: Stream | null = current?.streams?.[streamIndex] || null;
-  // إخفاء كل أشرطة التنقل والإشعارات لأندرويد لتصبح الشاشة كاملة
+  // إخفاء كل أشرطة التنقل والإشعارات لأندرويد لتصبح الشاشة كاملة 100%
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     RNStatusBar.setHidden(true, "fade");
