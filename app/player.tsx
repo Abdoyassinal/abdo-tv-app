@@ -1,36 +1,56 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   Pressable,
   ActivityIndicator,
+  StyleSheet,
   ScrollView,
-  StatusBar as RNStatusBar,
+  Dimensions,
 } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import Video from "react-native-video";
+import Video, { VideoRef } from "react-native-video";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
-import * as Haptics from "expo-haptics";
 import * as NavigationBar from "expo-navigation-bar";
+import { StatusBar } from "expo-status-bar";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { api } from "@/src/api/client"; // تأكد من المسار عندك
 
-import { colors, spacing, radius } from "@/src/theme/colors";
-import { api, Channel, Stream } from "@/src/api/client";
+const { width } = Dimensions.get("window");
+const HIDE_CONTROLS_AFTER_MS = 5000;
+const CONTAIN_MODES = ["contain", "cover", "stretch"] as const;
 
+type Stream = { 
+  id: string; 
+  url: string; 
+  label?: string; 
+  type?: "m3u8" | "ts" | "auto"; 
+  user_agent?: string; 
+  referer?: string; 
+};
+type Channel = { id: string; name: string; logo?: string; streams: Stream[] };
+
+function fmt(sec: number) {
+  if (!Number.isFinite(sec)) return "00:00";
+  const s = Math.floor(sec);
+  const m = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
+// اهم دالة - هي اللي بتحل مشكلة التشغيل
 function buildSource(stream: Stream) {
   const headers: Record<string, string> = {
-    "User-Agent": "VLC/3.0.18 LibVLC/3.0.18"
+    "User-Agent": stream.user_agent || "VLC/3.0.18 LibVLC/3.0.18",
+    "Referer": stream.referer || "https://iptv.com",
+    "Origin": stream.referer || "https://iptv.com"
   };
-  
-  if (stream.user_agent) headers["User-Agent"] = stream.user_agent;
-  if (stream.referer) headers["Referer"] = stream.referer;
 
-  return {
+  const source: any = {
     uri: stream.url,
     headers: headers,
-    type: "ts",
-    overrideExtension: "ts",
     bufferConfig: {
       minBufferMs: 15000,
       maxBufferMs: 50000,
@@ -38,420 +58,283 @@ function buildSource(stream: Stream) {
       bufferForPlaybackAfterRebufferMs: 5000
     }
   };
-}
 
-function fmt(sec: number) {
-  if (!isFinite(sec) || sec < 0) return "0:00";
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.floor(sec % 60);
-  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
-  const ss = String(s).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
+  // لو الرابط ts لازم نحددله النوع
+  if (stream.url.includes(".ts")) {
+    source.type = "ts";
+  }
 
-const CONTAIN_MODES: ("contain" | "cover" | "stretch")[] = ["contain", "cover", "stretch"];
-export default function PlayerScreen() {
+  return source;
+}export default function PlayerScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { channelId, groupId } = useLocalSearchParams<{ channelId: string; groupId: string }>();
+  const videoRef = useRef<VideoRef>(null);
 
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [current, setCurrent] = useState<Channel | null>(null);
-  const [streamIndex, setStreamIndex] = useState(0);
-  const [showLinks, setShowLinks] = useState(false);
-  const [controlsVisible, setControlsVisible] = useState(true);
-  const [contentFitIdx, setContentFitIdx] = useState(0);
-  const [barWidth, setBarWidth] = useState(0);
-  const [progress, setProgress] = useState({ current: 0, duration: 0 });
-  
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [channel, setChannel] = useState<Channel | null>(null);
+  const [streamIdx, setStreamIdx] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [buffering, setBuffering] = useState(true);
-  const [playerError, setPlayerError] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
+  const [playerError, setPlayerError] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [showControls, setShowControls] = useState(true);
+  const [contentFitIdx, setContentFitIdx] = useState(0);
+  const [progress, setProgress] = useState({ current: 0, duration: 0 });
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const videoRef = useRef<any>(null);
-  const hideTimer = useRef<any>(null);
+  const currentStream = channel?.streams[streamIdx];
 
-  const initialStream: Stream | null = current?.streams?.[streamIndex] || null;
-
+  // 1. اخفاء شريط التنقل + اجبار الشاشة افقي
   useEffect(() => {
+    NavigationBar.setVisibility("hidden");
+    NavigationBar.setPosition("absolute");
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-    RNStatusBar.setHidden(true, "fade");
-    NavigationBar.setVisibilityAsync("hidden");
     return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-      RNStatusBar.setHidden(false, "fade");
-      NavigationBar.setVisibilityAsync("visible");
+      NavigationBar.setVisibility("visible");
+      ScreenOrientation.unlockAsync();
     };
   }, []);
 
+  // 2. جلب بيانات القناة
   useEffect(() => {
+    let mounted = true;
     (async () => {
       try {
-        setBuffering(true);
-        setPlayerError(false);
-        const [chs, ch] = await Promise.all([
-          groupId ? api.getChannels(groupId) : Promise.resolve([]),
-          api.getChannel(channelId),
-        ]);
-        setChannels(chs);
-        setCurrent(ch);
-        setStreamIndex(0);
-      } catch (e) {
-        setPlayerError(true);
+        setLoading(true);
+        const res = await api.getChannel(id);
+        if (!mounted) return;
+        setChannel(res);
+        setStreamIdx(0);
+        setPlayerError(null);
+      } catch (e: any) {
+        setPlayerError("فشل تحميل القناة");
+      } finally {
+        setLoading(false);
       }
     })();
-  }, [channelId, groupId]);
+    return () => { mounted = false; };
+  }, [id]);
 
-  useEffect(() => {
-    setPlayerError(false);
-    setBuffering(true);
-    setIsPlaying(true);
-  }, [current, streamIndex]);
-
-  const scheduleHide = useCallback(() => {
+  // 3. اخفاء الكنترول تلقائي
+  const resetHideTimer = useCallback(() => {
+    setShowControls(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    if (!isLocked) {
-      hideTimer.current = setTimeout(() => setControlsVisible(false), 5000);
-    }
-  }, [isLocked]);
+    hideTimer.current = setTimeout(() => setShowControls(false), HIDE_CONTROLS_AFTER_MS);
+  }, []);
 
   useEffect(() => {
-    if (controlsVisible) scheduleHide();
-    return () => {
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-    };
-  }, [controlsVisible, scheduleHide]);
+    resetHideTimer();
+    return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
+  }, [resetHideTimer]);
 
-  const toggleControls = () => setControlsVisible((v) => !v);
+  const handleInteraction = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    resetHideTimer();
+  }, [resetHideTimer]);
 
-  const togglePlay = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsPlaying(!isPlaying);
-    scheduleHide();
-  };
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+        <Text style={styles.loadingText}>جاري التحميل...</Text>
+      </View>
+    );
+  }
 
-  const seekBy = (delta: number) => {
-    if (videoRef.current && progress.current) {
-      videoRef.current.seek(progress.current + delta);
-    }
-    scheduleHide();
-  };
+  if (!channel ||!currentStream) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorText}>القناة غير موجودة</Text>
+        <Pressable onPress={() => router.back()}><Text style={styles.link}>رجوع</Text></Pressable>
+      </View>
+    );
+  }
 
-  const switchChannel = (ch: Channel) => {
-    if (ch.id === current?.id) return;
-    if (!ch.streams || ch.streams.length === 0) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setCurrent(ch);
-    setStreamIndex(0);
-    setControlsVisible(true);
-  };
-
-  const selectStream = (idx: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setStreamIndex(idx);
-    setShowLinks(false);
-    setControlsVisible(true);
-  };
-
-  const cycleFit = () => {
-    setContentFitIdx((i) => (i + 1) % CONTAIN_MODES.length);
-    scheduleHide();
-  };
-
-  const onSeekBarPress = (e: any) => {
-    if (!progress.duration || barWidth === 0 || !videoRef.current) return;
-    const x = e.nativeEvent.locationX;
-    const frac = Math.max(0, Math.min(1, x / barWidth));
-    videoRef.current.seek(frac * progress.duration);
-    scheduleHide();
-  };
-
-  const isLive = !progress.duration || progress.duration === 0;
-  const fillPct = isLive ? 0 : (progress.current / progress.duration) * 100;
-  return (
+  const videoSource = buildSource(currentStream);return (
     <View style={styles.container}>
-      <Pressable style={styles.videoTouch} onPress={toggleControls}>
-        {initialStream && (
-          <Video
-            ref={videoRef}
-            source={buildSource(initialStream)}
-            style={styles.video}
-            resizeMode={CONTAIN_MODES[contentFitIdx]}
-            paused={!isPlaying}
-            controls={false}
-            useTextureView={true}
-            onLoad={(data) => {
-              setBuffering(false);
-              setProgress({ current: 0, duration: data.duration || 0 });
-            }}
-            onProgress={(data) => {
-              setProgress({
-                current: data.currentTime,
-                duration: data.seekableDuration || progress.duration,
-              });
-            }}
-            onBuffer={(data) => setBuffering(data.isBuffering)}
-            onError={() => {
-              setBuffering(false);
-              setPlayerError(true);
-            }}
-          />
+      <StatusBar hidden />
+
+      <Pressable style={styles.videoWrap} onPress={handleInteraction}>
+        <Video
+          ref={videoRef}
+          source={videoSource}
+          style={styles.video}
+          resizeMode={CONTAIN_MODES[contentFitIdx]}
+          paused={!isPlaying}
+          controls={false}
+          useTextureView={true}
+          onLoad={(data) => {
+            setBuffering(false);
+            setPlayerError(null);
+            setProgress({ current: 0, duration: data.duration || 0 });
+          }}
+          onProgress={(data) => {
+            setProgress({ current: data.currentTime, duration: progress.duration });
+          }}
+          onBuffer={({ isBuffering }) => setBuffering(isBuffering)}
+          onError={(e) => {
+            console.log("VIDEO ERROR:", e);
+            setBuffering(false);
+            setPlayerError("فشل تشغيل البث. جرب سيرفر اخر");
+          }}
+          onEnd={() => setIsPlaying(false)}
+          repeat={true}
+        />
+
+        {/* طبقة البفر والايرور */}
+        {(buffering || playerError) && (
+          <View style={styles.overlay}>
+            {buffering &&!playerError && (
+              <View style={styles.center}>
+                <ActivityIndicator size="large" color="#fff" />
+                <Text style={styles.overlayText}>جاري التحميل...</Text>
+              </View>
+            )}
+            {playerError && (
+              <View style={styles.center}>
+                <MaterialIcons name="error-outline" size={48} color="#ff4d4d" />
+                <Text style={styles.errorText}>{playerError}</Text>
+                <Pressable style={styles.retryBtn} onPress={() => {setPlayerError(null); setBuffering(true);}}>
+                  <Text style={styles.retryText}>اعادة المحاولة</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* شريط الكنترول */}
+        {showControls && (
+          <View style={styles.controls}>
+            <View style={styles.topBar}>
+              <Pressable onPress={() => router.back()}><Ionicons name="arrow-back" size={28} color="#fff" /></Pressable>
+              <Text style={styles.title} numberOfLines={1}>{channel.name}</Text>
+              <Pressable onPress={() => setContentFitIdx((i) => (i + 1) % 3)}>
+                <MaterialIcons name="aspect-ratio" size={26} color="#fff" />
+              </Pressable>
+            </View>
+
+            <View style={styles.bottomBar}>
+              <Pressable onPress={() => setIsPlaying((p) =>!p)}>
+                <Ionicons name={isPlaying? "pause" : "play"} size={32} color="#fff" />
+              </Pressable>
+              <Text style={styles.time}>{fmt(progress.current)} / {fmt(progress.duration)}</Text>
+            </View>
+          </View>
         )}
       </Pressable>
 
-      {buffering && !playerError && (
-        <View style={[styles.centerOverlay, { pointerEvents: "none" }]}>
-          <ActivityIndicator size="large" color="#FFD700" />
-        </View>
-      )}
-
-      {playerError && (
-        <View style={styles.centerOverlay}>
-          <Ionicons name="warning-outline" size={40} color="#FF3B30" />
-          <Text style={styles.errorText}>Error loading stream</Text>
-          {current && current.streams.length > 1 && (
-            <Pressable
-              style={styles.errorBtn}
-              onPress={() => selectStream((streamIndex + 1) % current.streams.length)}
-            >
-              <Text style={styles.errorBtnText}>Try another link</Text>
+      {/* قائمة السيرفرات */}
+      {channel.streams.length > 1 && showControls && (
+        <ScrollView horizontal style={styles.serversBar}>
+          {channel.streams.map((s, i) => (
+            <Pressable key={s.id} style={[styles.serverBtn, i === streamIdx && styles.serverBtnActive]} onPress={() => {setStreamIdx(i); setBuffering(true); setPlayerError(null);}}>
+              <Text style={styles.serverText}>{s.label || `Server ${i + 1}`}</Text>
             </Pressable>
-          )}
-        </View>
-      )}
-
-      {controlsVisible && (
-        <>
-          <View style={styles.topBar}>
-            <Pressable style={styles.backBtn} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </Pressable>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pillRow}
-            >
-              {channels.map((ch) => {
-                const active = ch.id === current?.id;
-                return (
-                  <Pressable
-                    key={ch.id}
-                    style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => switchChannel(ch)}
-                  >
-                    <Text style={[styles.pillText, active && styles.pillTextActive]} numberOfLines={1}>
-                      {ch.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          <View style={[styles.centerControls, { pointerEvents: "box-none" }]}>
-            {!isLocked && (
-              <>
-                <Pressable style={styles.ctrlBtn} onPress={() => seekBy(-10)}>
-                  <MaterialIcons name="replay-10" size={32} color="#fff" />
-                </Pressable>
-                <Pressable style={styles.ctrlBtn} onPress={() => setShowLinks(true)}>
-                  <Ionicons name="settings-outline" size={28} color="#fff" />
-                </Pressable>
-              </>
-            )}
-
-            <Pressable style={styles.playBtn} onPress={togglePlay}>
-              <Ionicons name={isPlaying ? "pause" : "play"} size={36} color="#fff" />
-            </Pressable>
-
-            {!isLocked && (
-              <>
-                <Pressable style={styles.ctrlBtn} onPress={cycleFit}>
-                  <MaterialIcons name="aspect-ratio" size={28} color="#fff" />
-                </Pressable>
-                <Pressable style={styles.ctrlBtn} onPress={() => seekBy(10)}>
-                  <MaterialIcons name="forward-10" size={32} color="#fff" />
-                </Pressable>
-              </>
-            )}
-
-            <Pressable style={styles.lockBtn} onPress={() => setIsLocked(!isLocked)}>
-              <Ionicons name={isLocked ? "lock-closed" : "lock-open-outline"} size={24} color="#fff" />
-            </Pressable>
-          </View>
-          <View style={styles.bottomBar}>
-            {isLive ? (
-              <View style={styles.liveRow}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveText}>LIVE</Text>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.timeText}>{fmt(progress.current)}</Text>
-                <Pressable
-                  style={styles.seekTrack}
-                  onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
-                  onPress={onSeekBarPress}
-                >
-                  <View style={styles.seekBg} />
-                  <View style={[styles.seekFill, { width: `${fillPct}%` }]} />
-                  <View style={[styles.seekThumb, { left: `${fillPct}%` }]} />
-                </Pressable>
-                <Text style={styles.timeText}>{fmt(progress.duration)}</Text>
-              </>
-            )}
-          </View>
-        </>
-      )}
-
-      {showLinks && current && (
-        <Pressable style={styles.linksOverlay} onPress={() => setShowLinks(false)}>
-          <Pressable style={styles.linksSheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.linksTitle}>{current.name}</Text>
-            <ScrollView style={{ maxHeight: 220 }}>
-              {current.streams.map((s, idx) => (
-                <Pressable
-                  key={s.id}
-                  style={[styles.linkRow, idx === streamIndex && styles.linkRowActive]}
-                  onPress={() => selectStream(idx)}
-                >
-                  <Ionicons
-                    name={idx === streamIndex ? "radio-button-on" : "radio-button-off"}
-                    size={20}
-                    color={idx === streamIndex ? "#FFD700" : "#aaa"}
-                  />
-                  <Text style={styles.linkLabel}>
-                    {s.label || `Link ${idx + 1}`} · {(s.type || "auto").toUpperCase()}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
+          ))}
+        </ScrollView>
       )}
     </View>
   );
-}
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
-  videoTouch: { ...StyleSheet.absoluteFillObject },
-  video: { flex: 1, backgroundColor: "#000" },
-  centerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
+}const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  center: {
+    flex: 1,
     justifyContent: "center",
-    gap: spacing.md,
+    alignItems: "center",
+    backgroundColor: "#000",
   },
-  errorText: { color: "#fff", fontSize: 16, fontWeight: "700" },
-  errorBtn: {
-    backgroundColor: "#FFD700",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+  loadingText: {
+    color: "#fff",
+    marginTop: 12,
+    fontSize: 16,
   },
-  errorBtnText: { color: "#000", fontWeight: "700" },
+  errorText: {
+    color: "#ff4d4d",
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  link: {
+    color: "#4da3ff",
+    fontSize: 16,
+    marginTop: 12,
+  },
+  videoWrap: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  video: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overlayText: {
+    color: "#fff",
+    marginTop: 12,
+    fontSize: 16,
+  },
+  retryBtn: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#4da3ff",
+    borderRadius: 8,
+  },
+  retryText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  controls: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "space-between",
+    padding: 16,
+  },
   topBar: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row-reverse",
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    gap: spacing.md,
   },
-  backBtn: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
+  title: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    flex: 1,
+    textAlign: "center",
+    marginHorizontal: 12,
   },
-  pillRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
-  pill: {
-    height: 38,
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.pill,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-  },
-  pillActive: { backgroundColor: "#FFD700", borderColor: "#FFD700" },
-  pillText: { color: "#ccc", fontWeight: "600", fontSize: 14, maxWidth: 150 },
-  pillTextActive: { color: "#000", fontWeight: "700" },
-  centerControls: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.lg,
-  },
-  ctrlBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.4)",
-  },
-  lockBtn: {
-    position: "absolute",
-    left: spacing.xl,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  lockBtnActive: { backgroundColor: "#FFD700" },
   bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row-reverse",
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    gap: spacing.md,
   },
-  timeText: { color: "#fff", fontSize: 12, fontWeight: "600", minWidth: 50, textAlign: "center" },
-  seekTrack: { flex: 1, height: 30, justifyContent: "center" },
-  seekBg: { height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)" },
-  seekFill: { position: "absolute", height: 4, borderRadius: 2, backgroundColor: "#FFD700" },
-  seekThumb: { position: "absolute", width: 12, height: 12, borderRadius: 6, backgroundColor: "#fff", marginLeft: -6 },
-  liveRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, flex: 1 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#FF3B30" },
-  liveText: { color: "#fff", fontWeight: "800", fontSize: 13 },
-  linksOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
+  time: {
+    color: "#fff",
+    fontSize: 14,
   },
-  linksSheet: {
-    width: "60%",
-    backgroundColor: "#1c1c1e",
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+  serversBar: {
+    maxHeight: 60,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    paddingVertical: 8,
   },
-  linksTitle: { color: "#fff", fontSize: 16, fontWeight: "700", marginBottom: spacing.md, textAlign: "right" },
-  linkRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md },
-  linkRowActive: { backgroundColor: "rgba(255,255,255,0.05)" },
-  linkLabel: { color: "#fff", fontSize: 14, flex: 1, textAlign: "right" },
+  serverBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginHorizontal: 6,
+    backgroundColor: "#333",
+    borderRadius: 6,
+  },
+  serverBtnActive: {
+    backgroundColor: "#4da3ff",
+  },
+  serverText: {
+    color: "#fff",
+    fontSize: 14,
+  },
 });
