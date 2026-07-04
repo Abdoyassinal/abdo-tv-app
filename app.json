@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "abdo tv",
-    "slug": "abdo-tv",
-    "version": "1.0.0",
+    "name": "abdo tv new",
+    "slug": "abdo-tv-clean-build",
+    "version": "1.0.2",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
