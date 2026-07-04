@@ -8,7 +8,8 @@
     "android": "expo start --android --clear",
     "ios": "expo start --ios --clear",
     "web": "expo start --web --clear",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "eas-build-pre-install": "yarn cache clean && yarn config set ignore-engines true"
   },
   "dependencies": {
     "@expo/metro-runtime": "6.1.2",
