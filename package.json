@@ -1,15 +1,14 @@
 {
   "name": "frontend",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
     "start": "expo start --clear",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android --clear",
     "ios": "expo start --ios --clear",
     "web": "expo start --web --clear",
-    "lint": "expo lint",
-    "eas-build-pre-install": "yarn config set ignore-engines true"
+    "lint": "expo lint"
   },
   "dependencies": {
     "@expo/metro-runtime": "6.1.2",
