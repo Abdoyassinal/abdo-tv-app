@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-// استيراد المشغل المطور البديل لـ expo-video لفك تشفير قنوات الـ TS
 import Video, { VideoRef } from "react-native-video";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as Haptics from "expo-haptics";
@@ -21,7 +20,6 @@ import { api, Channel, Stream } from "@/src/api/client";
 
 function buildSource(stream: Stream) {
   const headers: Record<string, string> = {
-    // تمرير معرّف VLC القياسي لتجاوز حظر وحماية سيرفر الـ IPTV الخارجي مهما تعددت الـ Ports
     "User-Agent": "VLC/3.0.18 LibVLC/3.0.18"
   };
   
@@ -31,7 +29,7 @@ function buildSource(stream: Stream) {
   return {
     uri: stream.url,
     headers: headers,
-    type: "ts", // إجبار محرك مشغل جوجل على تهيئة كوديكس الـ MPEG-TS تلقائياً للروابط بمختلف منافذها
+    type: "ts",
     bufferConfig: {
       minBufferMs: 15000,
       maxBufferMs: 50000,
@@ -74,19 +72,17 @@ export default function PlayerScreen() {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const initialStream: Stream | null = current?.streams?.[streamIndex] || null;
-  // إخفاء كل أشرطة التنقل والإشعارات لأندرويد لتصبح الشاشة كاملة 100%
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     RNStatusBar.setHidden(true, "fade");
-    NavigationBar.setVisibilityAsync("hidden"); // إخفاء أزرار أندرويد السفلية
+    NavigationBar.setVisibilityAsync("hidden");
     return () => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       RNStatusBar.setHidden(false, "fade");
-      NavigationBar.setVisibilityAsync("visible"); // إعادة أزرار أندرويد عند الخروج
+      NavigationBar.setVisibilityAsync("visible");
     };
   }, []);
 
-  // جلب القنوات والروابط من الباكيند الخاص بك
   useEffect(() => {
     (async () => {
       try {
@@ -198,25 +194,23 @@ export default function PlayerScreen() {
         )}
       </Pressable>
 
-      {/* Buffering */}
       {buffering && !playerError && (
         <View style={[styles.centerOverlay, { pointerEvents: "none" }]}>
           <ActivityIndicator size="large" color={colors.brand} />
         </View>
       )}
 
-      {/* Error */}
       {playerError && (
         <View style={styles.centerOverlay}>
           <Ionicons name="warning-outline" size={40} color={colors.error} />
-          <Text style={styles.errorText}>تعذّر تشغيل البث</Text>
+          <Text style={styles.errorText}>Error loading stream</Text>
           {current && current.streams.length > 1 && (
             <Pressable
               testID="switch-stream-error"
               style={styles.errorBtn}
               onPress={() => selectStream((streamIndex + 1) % current.streams.length)}
             >
-              <Text style={styles.errorBtnText}>تجربة رابط آخر</Text>
+              <Text style={styles.errorBtnText}>Try another link</Text>
             </Pressable>
           )}
         </View>
@@ -224,7 +218,6 @@ export default function PlayerScreen() {
 
       {controlsVisible && (
         <>
-          {/* Top bar: back + channel pills */}
           <View style={styles.topBar}>
             <Pressable testID="player-back" style={styles.backBtn} onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={22} color={colors.onBrandPrimary} />
@@ -255,7 +248,6 @@ export default function PlayerScreen() {
             </ScrollView>
           </View>
 
-          {/* Center controls */}
           <View style={[styles.centerControls, { pointerEvents: "box-none" }]}>
             <Pressable testID="rewind-button" style={styles.ctrlBtn} onPress={() => seekBy(-10)}>
               <MaterialIcons name="replay-10" size={34} color="#fff" />
@@ -280,12 +272,11 @@ export default function PlayerScreen() {
               <MaterialIcons name="forward-10" size={34} color="#fff" />
             </Pressable>
           </View>
-          {/* Bottom seek bar */}
           <View style={styles.bottomBar}>
             {isLive ? (
               <View style={styles.liveRow}>
                 <View style={styles.liveDot} />
-                <Text style={styles.liveText}>مباشر LIVE</Text>
+                <Text style={styles.liveText}>LIVE</Text>
               </View>
             ) : (
               <>
@@ -306,11 +297,10 @@ export default function PlayerScreen() {
         </>
       )}
 
-      {/* Stream/link switcher */}
       {showLinks && current && (
         <Pressable style={styles.linksOverlay} onPress={() => setShowLinks(false)}>
           <Pressable style={styles.linksSheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.linksTitle}>{current.name} — اختر الرابط</Text>
+            <Text style={styles.linksTitle}>{current.name}</Text>
             <ScrollView style={{ maxHeight: 220 }}>
               {current.streams.map((s, idx) => (
                 <Pressable
@@ -325,7 +315,7 @@ export default function PlayerScreen() {
                     color={idx === streamIndex ? colors.brand : colors.onSurfaceTertiary}
                   />
                   <Text style={styles.linkLabel}>
-                    {s.label || `رابط ${idx + 1}`} · {(s.type || "auto").toUpperCase()}
+                    {s.label || `Link ${idx + 1}`} · {(s.type || "auto").toUpperCase()}
                   </Text>
                 </Pressable>
               ))}
@@ -413,7 +403,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     alignItems: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
