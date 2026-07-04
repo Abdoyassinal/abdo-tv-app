@@ -2,7 +2,7 @@
   "expo": {
     "name": "abdo tv",
     "slug": "abdo-tv",
-    "version": "1.0.2",
+    "version": "1.0.4",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "frontend",
