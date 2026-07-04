@@ -30,6 +30,7 @@ function buildSource(stream: Stream) {
     uri: stream.url,
     headers: headers,
     type: "ts",
+    overrideExtension: "ts",
     bufferConfig: {
       minBufferMs: 15000,
       maxBufferMs: 50000,
@@ -178,6 +179,8 @@ export default function PlayerScreen() {
             style={styles.video}
             resizeMode={CONTAIN_MODES[contentFitIdx]}
             paused={!isPlaying}
+            controls={false}
+            useTextureView={true}
             onLoad={(data) => {
               setBuffering(false);
               setProgress({ current: 0, duration: data.duration || 0 });
