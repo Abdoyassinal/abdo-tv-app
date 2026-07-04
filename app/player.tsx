@@ -9,7 +9,7 @@ import {
   StatusBar as RNStatusBar,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import Video, { VideoRef } from "react-native-video";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as Haptics from "expo-haptics";
@@ -67,6 +67,7 @@ export default function PlayerScreen() {
   const [isPlaying, setIsPlaying] = useState(true);
   const [buffering, setBuffering] = useState(true);
   const [playerError, setPlayerError] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
 
   const videoRef = useRef<VideoRef>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -109,8 +110,10 @@ export default function PlayerScreen() {
 
   const scheduleHide = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => setControlsVisible(false), 4000);
-  }, []);
+    if (!isLocked) {
+      hideTimer.current = setTimeout(() => setControlsVisible(false), 5000);
+    }
+  }, [isLocked]);
 
   useEffect(() => {
     if (controlsVisible) scheduleHide();
@@ -196,17 +199,16 @@ export default function PlayerScreen() {
 
       {buffering && !playerError && (
         <View style={[styles.centerOverlay, { pointerEvents: "none" }]}>
-          <ActivityIndicator size="large" color={colors.brand} />
+          <ActivityIndicator size="large" color="#FFD700" />
         </View>
       )}
 
       {playerError && (
         <View style={styles.centerOverlay}>
-          <Ionicons name="warning-outline" size={40} color={colors.error} />
+          <Ionicons name="warning-outline" size={40} color="#FF3B30" />
           <Text style={styles.errorText}>Error loading stream</Text>
           {current && current.streams.length > 1 && (
             <Pressable
-              testID="switch-stream-error"
               style={styles.errorBtn}
               onPress={() => selectStream((streamIndex + 1) % current.streams.length)}
             >
@@ -218,9 +220,10 @@ export default function PlayerScreen() {
 
       {controlsVisible && (
         <>
+          {/* قائمة القنوات العلوية الأفقية مثل AYA TV */}
           <View style={styles.topBar}>
-            <Pressable testID="player-back" style={styles.backBtn} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={22} color={colors.onBrandPrimary} />
+            <Pressable style={styles.backBtn} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
             </Pressable>
             <ScrollView
               horizontal
@@ -232,14 +235,10 @@ export default function PlayerScreen() {
                 return (
                   <Pressable
                     key={ch.id}
-                    testID={`channel-pill-${ch.id}`}
                     style={[styles.pill, active && styles.pillActive]}
                     onPress={() => switchChannel(ch)}
                   >
-                    <Text
-                      style={[styles.pillText, active && styles.pillTextActive]}
-                      numberOfLines={1}
-                    >
+                    <Text style={[styles.pillText, active && styles.pillTextActive]} numberOfLines={1}>
                       {ch.name}
                     </Text>
                   </Pressable>
@@ -248,30 +247,40 @@ export default function PlayerScreen() {
             </ScrollView>
           </View>
 
+          {/* أزرار التحكم الوسطى الشفافة العائمة فوق الفيديو */}
           <View style={[styles.centerControls, { pointerEvents: "box-none" }]}>
-            <Pressable testID="rewind-button" style={styles.ctrlBtn} onPress={() => seekBy(-10)}>
-              <MaterialIcons name="replay-10" size={34} color="#fff" />
+            {!isLocked && (
+              <>
+                <Pressable style={styles.ctrlBtn} onPress={() => seekBy(-10)}>
+                  <MaterialIcons name="replay-10" size={32} color="#fff" />
+                </Pressable>
+                <Pressable style={styles.ctrlBtn} onPress={() => setShowLinks(true)}>
+                  <Ionicons name="settings-outline" size={28} color="#fff" />
+                </Pressable>
+              </>
+            )}
+
+            <Pressable style={styles.playBtn} onPress={togglePlay}>
+              <Ionicons name={isPlaying ? "pause" : "play"} size={36} color="#fff" />
             </Pressable>
-            <Pressable
-              testID="stream-settings-button"
-              style={styles.ctrlBtn}
-              onPress={() => {
-                setShowLinks(true);
-                setControlsVisible(true);
-              }}
-            >
-              <Ionicons name="settings-sharp" size={28} color="#fff" />
-            </Pressable>
-            <Pressable testID="play-pause-button" style={styles.playBtn} onPress={togglePlay}>
-              <Ionicons name={isPlaying ? "pause" : "play"} size={40} color="#fff" />
-            </Pressable>
-            <Pressable testID="aspect-button" style={styles.ctrlBtn} onPress={cycleFit}>
-              <MaterialIcons name="aspect-ratio" size={30} color="#fff" />
-            </Pressable>
-            <Pressable testID="forward-button" style={styles.ctrlBtn} onPress={() => seekBy(10)}>
-              <MaterialIcons name="forward-10" size={34} color="#fff" />
+
+            {!isLocked && (
+              <>
+                <Pressable style={styles.ctrlBtn} onPress={cycleFit}>
+                  <MaterialIcons name="aspect-ratio" size={28} color="#fff" />
+                </Pressable>
+                <Pressable style={styles.ctrlBtn} onPress={() => seekBy(10)}>
+                  <MaterialIcons name="forward-10" size={32} color="#fff" />
+                </Pressable>
+              </>
+            )}
+
+            {/* زر قفل اللمس السينمائي */}
+            <Pressable style={styles.lockBtn} onPress={() => setIsLocked(!isLocked)}>
+              <Ionicons name={isLocked ? "lock-closed" : "lock-open-outline"} size={24} color="#fff" />
             </Pressable>
           </View>
+          {/* شريط تشغيل الوقت السفلي الشفاف والناعم */}
           <View style={styles.bottomBar}>
             {isLive ? (
               <View style={styles.liveRow}>
@@ -305,14 +314,13 @@ export default function PlayerScreen() {
               {current.streams.map((s, idx) => (
                 <Pressable
                   key={s.id}
-                  testID={`link-option-${idx}`}
                   style={[styles.linkRow, idx === streamIndex && styles.linkRowActive]}
                   onPress={() => selectStream(idx)}
                 >
                   <Ionicons
                     name={idx === streamIndex ? "radio-button-on" : "radio-button-off"}
                     size={20}
-                    color={idx === streamIndex ? colors.brand : colors.onSurfaceTertiary}
+                    color={idx === streamIndex ? "#FFD700" : "#aaa"}
                   />
                   <Text style={styles.linkLabel}>
                     {s.label || `Link ${idx + 1}`} · {(s.type || "auto").toUpperCase()}
@@ -339,64 +347,77 @@ const styles = StyleSheet.create({
   },
   errorText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   errorBtn: {
-    backgroundColor: colors.brand,
+    backgroundColor: "#FFD700",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: radius.md,
   },
-  errorBtnText: { color: "#fff", fontWeight: "700" },
+  errorBtnText: { color: "#000", fontWeight: "700" },
   topBar: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     alignItems: "center",
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    gap: spacing.md,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.12)",
   },
-  pillRow: { alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.xs },
+  pillRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm },
   pill: {
-    height: 40,
+    height: 38,
     justifyContent: "center",
-    flexShrink: 0,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
-    backgroundColor: "rgba(255,255,255,0.85)",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
   },
-  pillActive: { backgroundColor: colors.warning },
-  pillText: { color: "#111", fontWeight: "700", fontSize: 13, maxWidth: 140 },
-  pillTextActive: { color: "#000" },
+  pillActive: { backgroundColor: "#FFD700", borderColor: "#FFD700" },
+  pillText: { color: "#ccc", fontWeight: "600", fontSize: 14, maxWidth: 150 },
+  pillTextActive: { color: "#000", fontWeight: "700" },
   centerControls: {
     ...StyleSheet.absoluteFillObject,
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.xl,
+    gap: spacing.lg,
   },
   ctrlBtn: {
-    width: 52,
-    height: 52,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.3)",
     alignItems: "center",
     justifyContent: "center",
   },
   playBtn: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(229,9,20,0.85)",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.4)",
+  },
+  lockBtn: {
+    position: "absolute",
+    left: spacing.xl,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   bottomBar: {
     position: "absolute",
@@ -405,35 +426,19 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row-reverse",
     alignItems: "center",
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(0,0,0,0.4)",
     gap: spacing.md,
   },
-  timeText: { color: "#fff", fontSize: 12, fontWeight: "600", minWidth: 48, textAlign: "center" },
-  seekTrack: { flex: 1, height: 24, justifyContent: "center" },
-  seekBg: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.3)",
-  },
-  seekFill: {
-    position: "absolute",
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.brand,
-  },
-  seekThumb: {
-    position: "absolute",
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#fff",
-    marginLeft: -7,
-  },
-  liveRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flex: 1 },
-  liveDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.brand },
-  liveText: { color: "#fff", fontWeight: "800", fontSize: 13 },
+  timeText: { color: "#fff", fontSize: 12, fontWeight: "600", minWidth: 50, textAlign: "center" },
+  seekTrack: { flex: 1, height: 30, justifyContent: "center" },
+  seekBg: { height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.2)" },
+  seekFill: { position: "absolute", height: 4, borderRadius: 2, backgroundColor: "#FFD700" },
+  seekThumb: { position: "absolute", width: 12, height: 12, borderRadius: 6, backgroundColor: "#fff", marginLeft: -6 },
+  liveRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, flex: 1 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#FF3B30" },
+  liveText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   linksOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -441,28 +446,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   linksSheet: {
-    width: "70%",
-    backgroundColor: colors.surfaceSecondary,
+    width: "60%",
+    backgroundColor: "#1c1c1e",
     borderRadius: radius.lg,
     padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  linksTitle: {
-    color: colors.onSurface,
-    fontSize: 15,
-    fontWeight: "800",
-    marginBottom: spacing.md,
-    textAlign: "right",
-  },
-  linkRow: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.sm,
-  },
-  linkRowActive: { backgroundColor: colors.surfaceTertiary },
-  linkLabel: { color: colors.onSurface, fontSize: 14, fontWeight: "600", flex: 1, textAlign: "right" },
+  linksTitle: { color: "#fff", fontSize: 16, fontWeight: "700", marginBottom: spacing.md, textAlign: "right" },
+  linkRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.md, paddingVertical: spacing.md },
+  linkRowActive: { backgroundColor: "rgba(255,255,255,0.05)" },
+  linkLabel: { color: "#fff", fontSize: 14, flex: 1, textAlign: "right" },
 });
