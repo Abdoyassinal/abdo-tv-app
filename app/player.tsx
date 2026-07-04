@@ -9,8 +9,8 @@ import {
   StatusBar as RNStatusBar,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
-import Video, { VideoRef } from "react-native-video";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import Video from "react-native-video";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as Haptics from "expo-haptics";
 import * as NavigationBar from "expo-navigation-bar";
@@ -69,8 +69,8 @@ export default function PlayerScreen() {
   const [playerError, setPlayerError] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
 
-  const videoRef = useRef<VideoRef>(null);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoRef = useRef<any>(null);
+  const hideTimer = useRef<any>(null);
 
   const initialStream: Stream | null = current?.streams?.[streamIndex] || null;
   useEffect(() => {
@@ -220,7 +220,6 @@ export default function PlayerScreen() {
 
       {controlsVisible && (
         <>
-          {/* قائمة القنوات العلوية الأفقية مثل AYA TV */}
           <View style={styles.topBar}>
             <Pressable style={styles.backBtn} onPress={() => router.back()}>
               <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -247,7 +246,6 @@ export default function PlayerScreen() {
             </ScrollView>
           </View>
 
-          {/* أزرار التحكم الوسطى الشفافة العائمة فوق الفيديو */}
           <View style={[styles.centerControls, { pointerEvents: "box-none" }]}>
             {!isLocked && (
               <>
@@ -275,12 +273,10 @@ export default function PlayerScreen() {
               </>
             )}
 
-            {/* زر قفل اللمس السينمائي */}
             <Pressable style={styles.lockBtn} onPress={() => setIsLocked(!isLocked)}>
               <Ionicons name={isLocked ? "lock-closed" : "lock-open-outline"} size={24} color="#fff" />
             </Pressable>
           </View>
-          {/* شريط تشغيل الوقت السفلي الشفاف والناعم */}
           <View style={styles.bottomBar}>
             {isLive ? (
               <View style={styles.liveRow}>
@@ -438,7 +434,7 @@ const styles = StyleSheet.create({
   seekThumb: { position: "absolute", width: 12, height: 12, borderRadius: 6, backgroundColor: "#fff", marginLeft: -6 },
   liveRow: { flexDirection: "row-reverse", alignItems: "center", gap: spacing.sm, flex: 1 },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#FF3B30" },
-  liveText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  liveText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   linksOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.6)",
