@@ -6,66 +6,35 @@ import {
   Pressable,
   ActivityIndicator,
   ScrollView,
+  StatusBar as RNStatusBar,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useVideoPlayer, VideoView } from "expo-video";
-import { useEvent } from "expo";
+// استيراد المشغل المطور البديل لدعم قنوات الـ TS
+import Video, { VideoRef } from "react-native-video";
 import * as ScreenOrientation from "expo-screen-orientation";
-import { SystemBars } from "react-native-edge-to-edge";
 import * as Haptics from "expo-haptics";
+import * as NavigationBar from "expo-navigation-bar";
 
 import { colors, spacing, radius } from "@/src/theme/colors";
 import { api, Channel, Stream } from "@/src/api/client";
-
-function mapContentType(type: string): "hls" | "dash" | "progressive" | undefined {
-  switch ((type || "").toLowerCase()) {
-    case "hls":
-    case "m3u8":
-      return "hls";
-    case "dash":
-    case "mpd":
-      return "dash";
-    case "ts":
-    case "progressive":
-      return "progressive";
-    default:
-      return undefined; // auto
-  }
-}
-
-// When type is "auto", detect from the URL path (ignoring query string).
-function detectFromUrl(url: string): "hls" | "dash" | "progressive" | undefined {
-  const path = (url || "").split("?")[0].toLowerCase();
-  if (path.endsWith(".m3u8") || path.includes(".m3u8")) return "hls";
-  if (path.endsWith(".mpd") || path.includes(".mpd")) return "dash";
-  if (path.endsWith(".ts") || path.includes(".ts")) return "progressive";
-  return undefined;
-}
-
-// Some IPTV servers reject requests that have no User-Agent (or the default
-// player UA). Provide a widely-accepted fallback for raw/progressive streams.
-const DEFAULT_UA =
-  "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
 function buildSource(stream: Stream) {
   const headers: Record<string, string> = {};
   if (stream.user_agent) headers["User-Agent"] = stream.user_agent;
   if (stream.referer) headers["Referer"] = stream.referer;
 
-  let contentType = mapContentType(stream.type);
-  if (!contentType) contentType = detectFromUrl(stream.url);
-
-  // Many IPTV servers reject requests that have no User-Agent. Always send one
-  // (for HLS/DASH/progressive) unless the admin provided a custom value.
-  if (!headers["User-Agent"]) {
-    headers["User-Agent"] = DEFAULT_UA;
-  }
-
+  // إعدادات البث لـ ExoPlayer لالتقاط قنوات الـ TS والـ Xtream فوراً بدون تقطيع
   return {
     uri: stream.url,
-    contentType,
-    headers,
+    headers: Object.keys(headers).length ? headers : undefined,
+    type: stream.type === "ts" ? "ts" : "m3u8",
+    bufferConfig: {
+      minBufferMs: 15000,
+      maxBufferMs: 50000,
+      bufferForPlaybackMs: 2500,
+      bufferForPlaybackAfterRebufferMs: 5000
+    }
   };
 }
 
@@ -79,7 +48,7 @@ function fmt(sec: number) {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-const CONTAIN_MODES: ("contain" | "cover" | "fill")[] = ["contain", "cover", "fill"];
+const CONTAIN_MODES: ("contain" | "cover" | "stretch")[] = ["contain", "cover", "stretch"];
 
 export default function PlayerScreen() {
   const router = useRouter();
@@ -93,57 +62,33 @@ export default function PlayerScreen() {
   const [contentFitIdx, setContentFitIdx] = useState(0);
   const [barWidth, setBarWidth] = useState(0);
   const [progress, setProgress] = useState({ current: 0, duration: 0 });
+  
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [buffering, setBuffering] = useState(true);
+  const [playerError, setPlayerError] = useState(false);
 
-  const videoRef = useRef<VideoView>(null);
+  const videoRef = useRef<VideoRef>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const initialStream: Stream | null = current?.streams?.[streamIndex] || null;
-
-  const player = useVideoPlayer(
-    initialStream ? buildSource(initialStream) : null,
-    (p) => {
-      p.timeUpdateEventInterval = 1;
-      p.play();
-    }
-  );
-
-  const { status, error } = useEvent(player, "statusChange", {
-    status: player.status,
-  });
-  const { isPlaying } = useEvent(player, "playingChange", {
-    isPlaying: player.playing,
-  });
-  useEvent(player, "timeUpdate", {
-    currentTime: 0,
-    currentLiveTimestamp: null,
-    currentOffsetFromLive: null,
-    bufferedPosition: 0,
-  });
-
-  // Poll progress off the player each second via timeUpdate side-effect
-  useEffect(() => {
-    const sub = player.addListener("timeUpdate", (payload) => {
-      setProgress({
-        current: payload.currentTime || 0,
-        duration: isFinite(player.duration) ? player.duration : 0,
-      });
-    });
-    return () => sub.remove();
-  }, [player]);
-
-  // Lock landscape while the player is mounted. System bars are hidden
-  // declaratively via <SystemBars hidden /> (edge-to-edge compatible).
+  // إخفاء كل أشرطة التنقل والإشعارات لأندرويد لتصبح الشاشة كاملة
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+    RNStatusBar.setHidden(true, "fade");
+    NavigationBar.setVisibilityAsync("hidden"); // إخفاء أزرار أندرويد السفلية
     return () => {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+      RNStatusBar.setHidden(false, "fade");
+      NavigationBar.setVisibilityAsync("visible"); // إعادة أزرار أندرويد عند الخروج
     };
   }, []);
 
-  // Load channels of group + current channel
+  // جلب القنوات والروابط من الباكيند الخاص بك
   useEffect(() => {
     (async () => {
       try {
+        setBuffering(true);
+        setPlayerError(false);
         const [chs, ch] = await Promise.all([
           groupId ? api.getChannels(groupId) : Promise.resolve([]),
           api.getChannel(channelId),
@@ -152,18 +97,15 @@ export default function PlayerScreen() {
         setCurrent(ch);
         setStreamIndex(0);
       } catch (e) {
-        // ignore
+        setPlayerError(true);
       }
     })();
   }, [channelId, groupId]);
 
-  // Replace source when channel/stream changes
   useEffect(() => {
-    const s = current?.streams?.[streamIndex];
-    if (s && player) {
-      player.replace(buildSource(s));
-      player.play();
-    }
+    setPlayerError(false);
+    setBuffering(true);
+    setIsPlaying(true);
   }, [current, streamIndex]);
 
   const scheduleHide = useCallback(() => {
@@ -182,13 +124,14 @@ export default function PlayerScreen() {
 
   const togglePlay = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (isPlaying) player.pause();
-    else player.play();
+    setIsPlaying(!isPlaying);
     scheduleHide();
   };
 
   const seekBy = (delta: number) => {
-    player.seekBy(delta);
+    if (videoRef.current && progress.current) {
+      videoRef.current.seek(progress.current + delta);
+    }
     scheduleHide();
   };
 
@@ -214,40 +157,53 @@ export default function PlayerScreen() {
   };
 
   const onSeekBarPress = (e: any) => {
-    if (!progress.duration || barWidth === 0) return;
+    if (!progress.duration || barWidth === 0 || !videoRef.current) return;
     const x = e.nativeEvent.locationX;
     const frac = Math.max(0, Math.min(1, x / barWidth));
-    player.currentTime = frac * progress.duration;
+    videoRef.current.seek(frac * progress.duration);
     scheduleHide();
   };
 
   const isLive = !progress.duration || progress.duration === 0;
   const fillPct = isLive ? 0 : (progress.current / progress.duration) * 100;
-  const buffering = status === "loading";
-
   return (
     <View style={styles.container}>
-      <SystemBars hidden />
       <Pressable style={styles.videoTouch} onPress={toggleControls}>
-        <VideoView
-          ref={videoRef}
-          player={player}
-          style={styles.video}
-          contentFit={CONTAIN_MODES[contentFitIdx]}
-          nativeControls={false}
-          allowsPictureInPicture
-        />
+        {initialStream && (
+          <Video
+            ref={videoRef}
+            source={buildSource(initialStream)}
+            style={styles.video}
+            resizeMode={CONTAIN_MODES[contentFitIdx]}
+            paused={!isPlaying}
+            onLoad={(data) => {
+              setBuffering(false);
+              setProgress({ current: 0, duration: data.duration || 0 });
+            }}
+            onProgress={(data) => {
+              setProgress({
+                current: data.currentTime,
+                duration: data.seekableDuration || progress.duration,
+              });
+            }}
+            onBuffer={(data) => setBuffering(data.isBuffering)}
+            onError={() => {
+              setBuffering(false);
+              setPlayerError(true);
+            }}
+          />
+        )}
       </Pressable>
 
       {/* Buffering */}
-      {buffering && (
+      {buffering && !playerError && (
         <View style={[styles.centerOverlay, { pointerEvents: "none" }]}>
           <ActivityIndicator size="large" color={colors.brand} />
         </View>
       )}
 
       {/* Error */}
-      {status === "error" && (
+      {playerError && (
         <View style={styles.centerOverlay}>
           <Ionicons name="warning-outline" size={40} color={colors.error} />
           <Text style={styles.errorText}>تعذّر تشغيل البث</Text>
@@ -321,7 +277,6 @@ export default function PlayerScreen() {
               <MaterialIcons name="forward-10" size={34} color="#fff" />
             </Pressable>
           </View>
-
           {/* Bottom seek bar */}
           <View style={styles.bottomBar}>
             {isLive ? (
