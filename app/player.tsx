@@ -50,7 +50,6 @@ function fmt(sec: number) {
 }
 
 const CONTAIN_MODES: ("contain" | "cover" | "stretch")[] = ["contain", "cover", "stretch"];
-
 export default function PlayerScreen() {
   const router = useRouter();
   const { channelId, groupId } = useLocalSearchParams<{ channelId: string; groupId: string }>();
@@ -73,6 +72,7 @@ export default function PlayerScreen() {
   const hideTimer = useRef<any>(null);
 
   const initialStream: Stream | null = current?.streams?.[streamIndex] || null;
+
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
     RNStatusBar.setHidden(true, "fade");
@@ -330,7 +330,6 @@ export default function PlayerScreen() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
   videoTouch: { ...StyleSheet.absoluteFillObject },
@@ -415,6 +414,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  lockBtnActive: { backgroundColor: "#FFD700" },
   bottomBar: {
     position: "absolute",
     bottom: 0,
