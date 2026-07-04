@@ -21,7 +21,7 @@ import { api, Channel, Stream } from "@/src/api/client";
 
 function buildSource(stream: Stream) {
   const headers: Record<string, string> = {
-    // تمرير معرّف VLC القياسي لتجاوز حظر وحماية سيرفر الـ IPTV الخارجي
+    // تمرير معرّف VLC القياسي لتجاوز حظر وحماية سيرفر الـ IPTV الخارجي مهما تعددت الـ Ports
     "User-Agent": "VLC/3.0.18 LibVLC/3.0.18"
   };
   
@@ -31,7 +31,7 @@ function buildSource(stream: Stream) {
   return {
     uri: stream.url,
     headers: headers,
-    type: "ts", // إجبار محرك مشغل جوجل على تهيئة كوديكس الـ MPEG-TS تلقائياً للروابط المحمية
+    type: "ts", // إجبار محرك مشغل جوجل على تهيئة كوديكس الـ MPEG-TS تلقائياً للروابط بمختلف منافذها
     bufferConfig: {
       minBufferMs: 15000,
       maxBufferMs: 50000,
