@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "abdoo tv",
+    "name": "Abdoo TV",
     "slug": "abdoo-tv",
     "version": "1.0.0",
     "orientation": "landscape",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/images/splash-image.png",
       "resizeMode": "contain",
       "backgroundColor": "#000"
     },
@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.your.app",
+      "bundleIdentifier": "com.abdoyassinal.abdootv",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -24,10 +24,10 @@
       }
     },
     "android": {
-      "package": "com.your.app",
+      "package": "com.abdoyassinal.abdootv",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000"
       },
       "usesCleartextTraffic": true,
@@ -39,7 +39,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       [
@@ -57,7 +57,7 @@
       ],
       "expo-router"
     ],
-    "scheme": "iptvplayer",
+    "scheme": "abdootv",
     "experiments": {
       "typedRoutes": true
     },
@@ -67,4 +67,3 @@
       }
     }
   }
-}
