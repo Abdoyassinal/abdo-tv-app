@@ -42,7 +42,7 @@
           "backgroundColor": "#000000"
         }
       ],
-      "expo-video",
+      "react-native-video",
       "react-native-edge-to-edge"
     ],
     "experiments": {
